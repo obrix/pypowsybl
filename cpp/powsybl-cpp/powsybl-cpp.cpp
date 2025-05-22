@@ -15,29 +15,39 @@ PowsyblCaller *PowsyblCaller::singleton_ = nullptr;
 graal_isolate_t* isolate = nullptr;
 
 GraalVmGuard::GraalVmGuard() {
+    std::cout << "Build GraalVmGuard" << std::endl;
     if (!isolate) {
         throw std::runtime_error("isolate has not been created");
     }
     //if thread already attached to the isolate,
     //we assume it's a nested call --> do nothing
 
-    thread_ = graal_get_current_thread(isolate);
-    if (thread_ == nullptr) {
+    graal_isolatethread_t* currentThread = graal_get_current_thread(isolate);
+    if (currentThread == nullptr) {
+        std::cout << "Thread is null" << std::endl;
+        graal_detach_thread(thread_);
+        std::cout << "Thread is detached" << std::endl;
         int c = graal_attach_thread(isolate, &thread_);
+        std::cout << "Attach thread return " << c << std::endl;
         if (c != 0) {
             throw std::runtime_error("graal_attach_thread error: " + std::to_string(c));
         }
         shouldDetach = true;
+    } else {
+        thread_ = currentThread;
     }
 }
 
 GraalVmGuard::~GraalVmGuard() noexcept(false) {
-    if (shouldDetach) {
+    std::cout << "Destroy graalvmguard "<< std::endl;
+    //if (shouldDetach) {
+        std::cout << "Should detach "<< std::endl;
         int c = graal_detach_thread(thread_);
+        std::cout << "detach return "<< c << std::endl;
         if (c != 0) {
             throw std::runtime_error("graal_detach_thread error: " + std::to_string(c));
         }
-    }
+    //}
 }
 PowsyblCaller* PowsyblCaller::get() {
     std::lock_guard<std::mutex> guard(initMutex_);
@@ -64,6 +74,7 @@ void init(std::function <void(GraalVmGuard* guard, exception_handler* exc)> preJ
     PowsyblCaller::get()->setPostProcessingJavaCall(postJavaCall);
 
     int c = graal_create_isolate(nullptr, &isolate, &thread);
+    std::cout << "Create isolate " << c << std::endl;
     if (c != 0) {
         throw std::runtime_error("graal_create_isolate error: " + std::to_string(c));
     }
