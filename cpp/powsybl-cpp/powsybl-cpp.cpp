@@ -80,6 +80,9 @@ void init(std::function <void(GraalVmGuard* guard, exception_handler* exc)> preJ
 JavaHandle::JavaHandle(void* handle):
     handle_(handle, [](void* to_be_deleted) {
         if (to_be_deleted) {
+            std::cout << "Destroy object handle" << std::endl;
+            std::thread::id this_id = std::this_thread::get_id();
+            std::cout << "Current thread id: " << this_id << std::endl;
             PowsyblCaller::get()->callJava<>(::destroyObjectHandle, to_be_deleted);
         }
     })
