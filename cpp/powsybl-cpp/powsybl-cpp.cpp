@@ -2,10 +2,11 @@
  * Copyright (c) 2020-2022, RTE (http://www.rte-france.com)
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, You can obtain one at http:/t/mozilla.org/MPL/2.0/.
  */
 #include "powsybl-cpp.h"
 #include <iostream>
+#include <thread>
 
 namespace pypowsybl {
 
@@ -15,39 +16,35 @@ PowsyblCaller *PowsyblCaller::singleton_ = nullptr;
 graal_isolate_t* isolate = nullptr;
 
 GraalVmGuard::GraalVmGuard() {
-    std::cout << "Build GraalVmGuard" << std::endl;
     if (!isolate) {
         throw std::runtime_error("isolate has not been created");
     }
     //if thread already attached to the isolate,
     //we assume it's a nested call --> do nothing
 
-    graal_isolatethread_t* currentThread = graal_get_current_thread(isolate);
-    if (currentThread == nullptr) {
-        std::cout << "Thread is null" << std::endl;
-        graal_detach_thread(thread_);
-        std::cout << "Thread is detached" << std::endl;
+    std::thread::id this_id = std::this_thread::get_id();
+    std::cout << "Current thread id: " << this_id << std::endl;
+
+    thread_ = graal_get_current_thread(isolate);
+    if (thread_ == nullptr) {
+        std::cout << "Thread null attaching current ... " << this_id << std::endl;
         int c = graal_attach_thread(isolate, &thread_);
-        std::cout << "Attach thread return " << c << std::endl;
         if (c != 0) {
             throw std::runtime_error("graal_attach_thread error: " + std::to_string(c));
         }
         shouldDetach = true;
-    } else {
-        thread_ = currentThread;
     }
 }
 
 GraalVmGuard::~GraalVmGuard() noexcept(false) {
-    std::cout << "Destroy graalvmguard "<< std::endl;
-    //if (shouldDetach) {
-        std::cout << "Should detach "<< std::endl;
+    if (shouldDetach) {
+        std::thread::id this_id = std::this_thread::get_id();
+        std::cout << "Should detach true, detaching... (thread id: ) " << this_id << std::endl;
         int c = graal_detach_thread(thread_);
-        std::cout << "detach return "<< c << std::endl;
         if (c != 0) {
             throw std::runtime_error("graal_detach_thread error: " + std::to_string(c));
         }
-    //}
+    }
 }
 PowsyblCaller* PowsyblCaller::get() {
     std::lock_guard<std::mutex> guard(initMutex_);
@@ -74,7 +71,6 @@ void init(std::function <void(GraalVmGuard* guard, exception_handler* exc)> preJ
     PowsyblCaller::get()->setPostProcessingJavaCall(postJavaCall);
 
     int c = graal_create_isolate(nullptr, &isolate, &thread);
-    std::cout << "Create isolate " << c << std::endl;
     if (c != 0) {
         throw std::runtime_error("graal_create_isolate error: " + std::to_string(c));
     }
@@ -865,7 +861,7 @@ void addFactorMatrix(const JavaHandle& sensitivityAnalysisContext, std::string m
        ToCharPtrPtr variableIdPtr(variablesIds);
        ToCharPtrPtr contingenciesIdPtr(contingenciesIds);
        PowsyblCaller::get()->callJava(::addFactorMatrix, sensitivityAnalysisContext, branchIdPtr.get(), branchesIds.size(),
-                  variableIdPtr.get(), variablesIds.size(), contingenciesIdPtr.get(), contingenciesIds.size(), 
+                  variableIdPtr.get(), variablesIds.size(), contingenciesIdPtr.get(), contingenciesIds.size(),
                   (char*) matrixId.c_str(), ContingencyContextType, sensitivityFunctionType, sensitivityVariableType);
 }
 
